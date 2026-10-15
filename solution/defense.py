@@ -15,7 +15,33 @@ def register(ctx):
 
 
 def check_data_batch(payload, ctx):
-    # TODO: full checks in next commit
+    res = ctx.tools.batch_profile(payload["batch_id"])
+    if isinstance(res, dict) and "error" in res:
+        return Verdict(alert=False, pillar="checks")
+
+    b = ctx.baseline
+    rows = res.get("row_count", 500)
+    row_min = b.get("row_count_min", 435.4732)
+    row_max = b.get("row_count_max", 561.2948)
+    if rows < row_min or rows > row_max:
+        return Verdict(alert=True, pillar="checks", reason=f"Row count {rows} outside [{row_min}, {row_max}]")
+
+    null_cust = res.get("null_rate", {}).get("customer_id", 0.0)
+    null_max = b.get("null_rate_max", 0.0109)
+    if null_cust > null_max:
+        return Verdict(alert=True, pillar="checks", reason=f"Null rate {null_cust} > {null_max}")
+
+    mean_amt = res.get("mean_amount", 80.0)
+    mean_min = b.get("mean_amount_min", 72.7645)
+    mean_max = b.get("mean_amount_max", 90.6053)
+    if mean_amt < mean_min or mean_amt > mean_max:
+        return Verdict(alert=True, pillar="checks", reason=f"Mean amount {mean_amt} outside [{mean_min}, {mean_max}]")
+
+    stale = res.get("staleness_min", 0.0)
+    stale_max = b.get("staleness_min_max", 8.418)
+    if stale > stale_max:
+        return Verdict(alert=True, pillar="checks", reason=f"Staleness {stale} > {stale_max}")
+
     return Verdict(alert=False, pillar="checks")
 
 
