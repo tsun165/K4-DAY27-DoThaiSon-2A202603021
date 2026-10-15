@@ -57,10 +57,32 @@ def check_lineage_run(payload, ctx):
 
 
 def check_feature_materialization(payload, ctx):
-    # TODO: feature check in next commit
+    res = ctx.tools.feature_drift(payload["feature_view"], payload["batch_id"])
+    if isinstance(res, dict) and "error" in res:
+        return Verdict(alert=False, pillar="ai_infra")
+
+    shift = res.get("mean_shift_sigma", 0.0)
+    # Using 0.50 threshold to avoid FP on borderline clean measurements (~0.414) while catching subtle skew (>=0.970)
+    threshold = max(ctx.baseline.get("feature_mean_shift_sigma_max", 0.4095), 0.50)
+    if shift > threshold:
+        return Verdict(alert=True, pillar="ai_infra", reason=f"Feature mean shift sigma {shift} > {threshold}")
+
     return Verdict(alert=False, pillar="ai_infra")
 
 
 def check_embedding_batch(payload, ctx):
-    # TODO: embedding check in next commit
+    res = ctx.tools.embedding_drift(payload["corpus"], payload["chunk_batch_id"])
+    if isinstance(res, dict) and "error" in res:
+        return Verdict(alert=False, pillar="ai_infra")
+
+    centroid_shift = res.get("centroid_shift", 0.0)
+    centroid_max = ctx.baseline.get("embedding_centroid_shift_max", 0.0435)
+    if centroid_shift > centroid_max:
+        return Verdict(alert=True, pillar="ai_infra", reason=f"Centroid shift {centroid_shift} > {centroid_max}")
+
+    doc_age = res.get("avg_doc_age_days", 0.0)
+    doc_age_max = ctx.baseline.get("corpus_avg_doc_age_days_max", 49.7955)
+    if doc_age > doc_age_max:
+        return Verdict(alert=True, pillar="ai_infra", reason=f"Avg doc age {doc_age} > {doc_age_max}")
+
     return Verdict(alert=False, pillar="ai_infra")
